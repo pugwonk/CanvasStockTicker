@@ -1,0 +1,12 @@
+<resources>
+
+    <string name="app_name">Canvas for Pebble: Stock Ticker Plugin</string>
+    <string name="plugin_name">Stock Ticker</string>
+
+    <string-array name="format_mask_descs">
+        <item>Time</item>
+        <item>Ticker</item>
+        <item >Price</item>
+    </string-array>
+
+</resources>
