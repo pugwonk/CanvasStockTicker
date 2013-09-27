@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Random;
 
 import android.content.Context;
 import android.content.Intent;
@@ -38,6 +39,9 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 		// String ticker;
 		double price;
 		StockChart sc;
+		public StockInfo(Context context) {
+			sc = new StockChart(context);
+		}
 	}
 
 	// private static StockInfo current_state = new StockInfo();
@@ -86,14 +90,15 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 	protected String get_format_mask_value(int def_id, String format_mask,
 			Context context, String param) {
 
-		Log.i(LOG_TAG, "get_format_mask_value def_id = " + def_id
-				+ " format_mask = '" + format_mask + "'");
+//		Log.i(LOG_TAG, "get_format_mask_value def_id = " + def_id
+//				+ " format_mask = '" + format_mask + "'");
 
 		if (def_id == TICKER_TEXT_ID) {
+			Log.i(LOG_TAG, "Returning ticker for " + param);
 			startService(context);
 
 			if (!stock_list.containsKey(param)) {
-				stock_list.put(param, new StockInfo());
+				stock_list.put(param, new StockInfo(context));
 				return "...";
 			}
 			StockInfo current_state = stock_list.get(param);
@@ -122,12 +127,14 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 	@Override
 	protected Bitmap get_bitmap_value(int def_id, Context context, String param) {
 		if (def_id == TICKER_DAYCHART_ID) {
-			Log.i(LOG_TAG, "Returning day chart");
+			Log.i(LOG_TAG, "Returning day chart for " + param);
 			startService(context);
 			// Data not retrieved for this yet - just return the icon for the
 			// moment
 			if (!stock_list.containsKey(param)) {
-				stock_list.put(param, new StockInfo());
+				Log.i(LOG_TAG, "Day chart data doesn't exist for " + param + " - creating");
+				StockInfo makeStock = new StockInfo(context);
+				stock_list.put(param, makeStock);
 				return BitmapFactory.decodeResource(context.getResources(),
 						R.drawable.canvas_icon);
 			}
@@ -151,19 +158,18 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 	static Context keepContext;
 
 	public static void updateTicker(Context context) {
-		Log.i(LOG_TAG, "Updating ticker");
 		AsyncHttpClient client = new AsyncHttpClient();
 
 		keepContext = context;
 
 		for (Entry<String, StockInfo> entry : stock_list.entrySet()) {
-			Log.i(LOG_TAG, "Updating current ticker for " + entry.getKey());
+			Log.i(LOG_TAG, "Updating ticker for " + entry.getKey());
 			client.get(
 					"http://finance.yahoo.com/d/quotes.csv?s=" + entry.getKey()
 							+ "&f=sbp2m2", new AsyncHttpResponseHandler() {
 						@Override
 						public void onSuccess(String response) {
-							Log.i(LOG_TAG, "Got valid response: " + response);
+							Log.i(LOG_TAG, "Got valid tick response: " + response);
 							List<String> list = new ArrayList<String>(Arrays
 									.asList(response.split(",")));
 
@@ -174,25 +180,25 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 									.format(Calendar.getInstance().getTime());
 
 							toUpdate.price = Double.parseDouble(list.get(1));
+							Log.i(LOG_TAG, "Requesting ticker update");
 							notify_canvas_updates_available(TICKER_TEXT_ID,
 									keepContext);
 						}
 					});
 
-			Log.i(LOG_TAG, "Getting day data for " + entry.getKey());
+			Log.i(LOG_TAG, "Updating day chart for " + entry.getKey());
 			client.get("http://chartapi.finance.yahoo.com/instrument/1.0/"
 					+ entry.getKey() + "/chartdata;type=quote;range=1d/csv",
 					new AsyncHttpResponseHandler() {
 						@Override
 						public void onSuccess(String response) {
-							Log.i(LOG_TAG, "Got valid day data response");
+							Log.i(LOG_TAG, "Got valid day chart response");
 							// Strip out all the data at the top, leaving just
 							// the tick data. The ?s thing
 							// does it multi-line
 							String ticker = response.replaceAll(
 									"(?s).*ticker:(\\w{4}).*", "$1");
 							ticker = ticker.toUpperCase();
-							Log.i(LOG_TAG, "Got day data back for " + ticker);
 							StockInfo toUpdate = stock_list.get(ticker);
 
 							// Remove the header stuff now that we've got the
@@ -206,18 +212,24 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 							response = response.replaceAll(
 									"(?s)\\n([0-9\\.]*),[^\\n]*", "$1\n");
 
-							toUpdate.sc = new StockChart(keepContext);
+							//Log.i(LOG_TAG, "Creating chart");
+							//toUpdate.sc = new StockChart(keepContext);
+							//Log.i(LOG_TAG, "Chart created");
+							Log.i(LOG_TAG, "Populating day chart for " + ticker);
 							List<String> list = new ArrayList<String>(Arrays
 									.asList(response.split("\n")));
 							Log.i(LOG_TAG, "Got first day value for " + ticker
 									+ ": " + list.get(0));
 
+							toUpdate.sc.mCurrentSeries.setTitle(ticker); // for debug
 							for (int i = 0; i < list.size(); i++) {
-								Log.i(LOG_TAG, "Charting day value #" + String.valueOf(i) + " for " + ticker
-										+ ": " + list.get(i));
+//								Log.i(LOG_TAG, "Charting day value #" + String.valueOf(i) + " for " + ticker
+//										+ ": " + list.get(i));
+								Double stockVal = Double.parseDouble(list.get(i));
 								toUpdate.sc.mCurrentSeries.add(i,
-										Double.parseDouble(list.get(i)));
+										stockVal);
 							}
+							Log.i(LOG_TAG, "Requesting chart update");
 							notify_canvas_updates_available(TICKER_DAYCHART_ID,
 									keepContext);
 

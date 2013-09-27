@@ -35,7 +35,7 @@ public class StockChart {
 		mDataset.addSeries(mCurrentSeries);
 		mCurrentRenderer = new XYSeriesRenderer();
 		mCurrentRenderer.setShowLegendItem(false);
-		mCurrentRenderer.setLineWidth(10f);
+		mCurrentRenderer.setLineWidth(4f);
 		mCurrentRenderer.setColor(Color.WHITE);
 		mRenderer.addSeriesRenderer(mCurrentRenderer);
 		mRenderer.setShowAxes(false);
@@ -56,7 +56,7 @@ public class StockChart {
 
 	public StockChart(Context context) {
 		initChart();
-		addSampleData();
+		//addSampleData();
 		mChart = ChartFactory.getLineChartView(context, mDataset, mRenderer);
 	}
 	

@@ -27,7 +27,7 @@ public class StockTickerService extends Service {
 
 	private void startService() {
         Log.i(StockTickerPlugin.LOG_TAG, "Starting service");
-		timer.scheduleAtFixedRate(new mainTask(), 0, 15*60000); // 15 minute somewhat arbitrary update time
+		timer.scheduleAtFixedRate(new mainTask(), 0, 1*60000); // 15*60000); // 15 minute somewhat arbitrary update time
 	}
 
 	private class mainTask extends TimerTask {
