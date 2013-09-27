@@ -31,12 +31,15 @@ import com.betaminus.phonepowersource.R;
 import com.loopj.android.http.AsyncHttpClient;
 import com.loopj.android.http.AsyncHttpResponseHandler;
 import com.pennas.pebblecanvas.plugin.PebbleCanvasPlugin;
+import com.pennas.pebblecanvas.plugin.PebbleCanvasPlugin.ImagePluginDefinition;
 
 public class StockTickerPlugin extends PebbleCanvasPlugin {
 	public static final String LOG_TAG = "CANV_TICKER";
 
-	public static final int TICKER_ID = 1; // Needs to be unique only within
-											// this plugin package
+	public static final int TICKER_TEXT_ID = 1; // Needs to be unique only
+												// within
+	// this plugin package
+	public static final int TICKER_DAYCHART_ID = 2;
 
 	private static final String[] MASKS = { "%T", "%S", "%P" };
 	private static final int MASK_TIME = 0;
@@ -45,7 +48,7 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 
 	private static class StockInfo {
 		String time;
-		//String ticker;
+		// String ticker;
 		double price;
 	}
 
@@ -63,7 +66,7 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 
 		// now playing (text)
 		TextPluginDefinition tplug = new TextPluginDefinition();
-		tplug.id = TICKER_ID;
+		tplug.id = TICKER_TEXT_ID;
 		tplug.name = context.getString(R.string.plugin_name);
 		tplug.format_mask_descriptions = new ArrayList<String>(
 				Arrays.asList(context.getResources().getStringArray(
@@ -80,6 +83,13 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 		tplug.default_format_string = "%S: %P";
 		plugins.add(tplug);
 
+		// chart
+		ImagePluginDefinition iplug = new ImagePluginDefinition();
+		iplug.id = TICKER_DAYCHART_ID;
+		iplug.name = context.getString(R.string.plugin_name);
+		iplug.params_description = "Ticker symbol";
+		plugins.add(iplug);
+
 		return plugins;
 	}
 
@@ -91,7 +101,7 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 		Log.i(LOG_TAG, "get_format_mask_value def_id = " + def_id
 				+ " format_mask = '" + format_mask + "'");
 
-		if (def_id == TICKER_ID) {
+		if (def_id == TICKER_TEXT_ID) {
 			// Service will only get started once, so no great problem
 			// re-calling this
 			Intent tickerService = new Intent(context, StockTickerService.class);
@@ -99,18 +109,9 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 
 			if (!stock_list.containsKey(param)) {
 				stock_list.put(param, new StockInfo());
-				return "nokey";
+				return "...";
 			}
 			StockInfo current_state = stock_list.get(param);
-
-			// if (!param.equals(current_state.ticker)) // we're changing
-			// ticker
-			// {
-			// Log.i(LOG_TAG,"Changing ticker from '" + current_state.ticker
-			// + "' to '" + param + "'");
-			// current_state.ticker = param;
-			// return "-";
-			// }
 
 			// which field to return current value for?
 			if (format_mask.equals(MASKS[MASK_TIME])) {
@@ -128,42 +129,73 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 	// send bitmap value to canvas when requested
 	@Override
 	protected Bitmap get_bitmap_value(int def_id, Context context, String param) {
+		if (def_id == TICKER_DAYCHART_ID) {
+			Log.i(LOG_TAG, "Returning day chart");
+			// Bitmap bm = BitmapFactory.decodeResource(context.getResources(),
+			// R.drawable.canvas_icon);
+			StockChart sc = new StockChart(context);
+			Bitmap bm = sc.getBitmap();
+			return bm;
+		}
+		Log.i(LOG_TAG, "no matching image mask found");
 		return null;
 	}
-	
+
 	static Context keepContext;
 
 	public static void updateTicker(Context context) {
 		Log.i(LOG_TAG, "Updating ticker");
 		AsyncHttpClient client = new AsyncHttpClient();
-		
+
 		keepContext = context;
-		
-		for (Entry<String, StockInfo> entry : stock_list.entrySet())
-		{
-			Log.i(LOG_TAG, "Updating ticker for " + entry.getKey());
-			client.get("http://finance.yahoo.com/d/quotes.csv?s="
-					+ entry.getKey() + "&f=sb2b3jk",
-					new AsyncHttpResponseHandler() {
+
+		for (Entry<String, StockInfo> entry : stock_list.entrySet()) {
+			Log.i(LOG_TAG, "Updating current ticker for " + entry.getKey());
+			client.get(
+					"http://finance.yahoo.com/d/quotes.csv?s=" + entry.getKey()
+							+ "&f=sbp2m2", new AsyncHttpResponseHandler() {
 						@Override
 						public void onSuccess(String response) {
 							Log.i(LOG_TAG, "Got valid response: " + response);
 							List<String> list = new ArrayList<String>(Arrays
 									.asList(response.split(",")));
-							
+
 							String ticker = list.get(0).replace("\"", "");
 							StockInfo toUpdate = stock_list.get(ticker);
-							
+
 							toUpdate.time = new SimpleDateFormat("H:mm")
 									.format(Calendar.getInstance().getTime());
-							
+
 							toUpdate.price = Double.parseDouble(list.get(1));
-							notify_canvas_updates_available(TICKER_ID, keepContext);
+							notify_canvas_updates_available(TICKER_TEXT_ID,
+									keepContext);
+						}
+					});
+
+			Log.i(LOG_TAG, "Getting day data for " + entry.getKey());
+			client.get("http://chartapi.finance.yahoo.com/instrument/1.0/"
+					+ entry.getKey() + "/chartdata;type=quote;range=1d/csv",
+					new AsyncHttpResponseHandler() {
+						@Override
+						public void onSuccess(String response) {
+							Log.i(LOG_TAG, "Got valid day data response");
+							// Strip out all the data at the top, leaving just the tick data. The ?s thing
+							// does it multi-line
+							String ticker = response.replaceAll("(?s).*ticker:(\\w{4}).*", "$1");
+							ticker = ticker.toUpperCase();
+							Log.i(LOG_TAG, "Got day data back for " + ticker);
+							
+							response = response.replaceAll("(?s).*volume:[0-9\\,]*","");
+							
+							// We now have the data on a sequence of lines - need to dump all but the prices
+							response = response.replaceAll("[0-9]*,","");
+							Log.i(LOG_TAG, "Got response " + response);
+							//response = response.replaceAll("^([0-9]\\.*),.*","$1");
 						}
 					});
 
 		}
-		
+
 	}
 
 }
