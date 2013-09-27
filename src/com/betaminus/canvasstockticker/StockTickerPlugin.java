@@ -1,37 +1,24 @@
 package com.betaminus.canvasstockticker;
 
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Random;
 
-import java.util.Arrays;
-
-import android.content.ContentUris;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
-import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.net.Uri;
-import android.preference.PreferenceManager;
-import android.provider.MediaStore;
 import android.util.Log;
 
 import com.betaminus.phonepowersource.R;
 import com.loopj.android.http.AsyncHttpClient;
 import com.loopj.android.http.AsyncHttpResponseHandler;
 import com.pennas.pebblecanvas.plugin.PebbleCanvasPlugin;
-import com.pennas.pebblecanvas.plugin.PebbleCanvasPlugin.ImagePluginDefinition;
 
 public class StockTickerPlugin extends PebbleCanvasPlugin {
 	public static final String LOG_TAG = "CANV_TICKER";
@@ -50,6 +37,7 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 		String time;
 		// String ticker;
 		double price;
+		StockChart sc;
 	}
 
 	// private static StockInfo current_state = new StockInfo();
@@ -102,10 +90,7 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 				+ " format_mask = '" + format_mask + "'");
 
 		if (def_id == TICKER_TEXT_ID) {
-			// Service will only get started once, so no great problem
-			// re-calling this
-			Intent tickerService = new Intent(context, StockTickerService.class);
-			context.startService(tickerService);
+			startService(context);
 
 			if (!stock_list.containsKey(param)) {
 				stock_list.put(param, new StockInfo());
@@ -126,19 +111,41 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 		return null;
 	}
 
+	private void startService(Context context) {
+		// Service will only get started once, so no great problem
+		// re-calling this
+		Intent tickerService = new Intent(context, StockTickerService.class);
+		context.startService(tickerService);
+	}
+
 	// send bitmap value to canvas when requested
 	@Override
 	protected Bitmap get_bitmap_value(int def_id, Context context, String param) {
 		if (def_id == TICKER_DAYCHART_ID) {
 			Log.i(LOG_TAG, "Returning day chart");
-			// Bitmap bm = BitmapFactory.decodeResource(context.getResources(),
-			// R.drawable.canvas_icon);
-			StockChart sc = new StockChart(context);
-			Bitmap bm = sc.getBitmap();
-			return bm;
+			startService(context);
+			// Data not retrieved for this yet - just return the icon for the
+			// moment
+			if (!stock_list.containsKey(param)) {
+				stock_list.put(param, new StockInfo());
+				return BitmapFactory.decodeResource(context.getResources(),
+						R.drawable.canvas_icon);
+			}
+			StockInfo current_state = stock_list.get(param);
+
+			if (current_state.sc != null) { // we have already drawn chart
+				Bitmap bm = current_state.sc.getBitmap();
+				return bm;
+			}
+			else
+			{
+				return BitmapFactory.decodeResource(context.getResources(),
+						R.drawable.canvas_icon);
+			}
 		}
 		Log.i(LOG_TAG, "no matching image mask found");
-		return null;
+		return BitmapFactory.decodeResource(context.getResources(),
+				R.drawable.canvas_icon);
 	}
 
 	static Context keepContext;
@@ -179,18 +186,41 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 						@Override
 						public void onSuccess(String response) {
 							Log.i(LOG_TAG, "Got valid day data response");
-							// Strip out all the data at the top, leaving just the tick data. The ?s thing
+							// Strip out all the data at the top, leaving just
+							// the tick data. The ?s thing
 							// does it multi-line
-							String ticker = response.replaceAll("(?s).*ticker:(\\w{4}).*", "$1");
+							String ticker = response.replaceAll(
+									"(?s).*ticker:(\\w{4}).*", "$1");
 							ticker = ticker.toUpperCase();
 							Log.i(LOG_TAG, "Got day data back for " + ticker);
-							
-							response = response.replaceAll("(?s).*volume:[0-9\\,]*","");
-							
-							// We now have the data on a sequence of lines - need to dump all but the prices
-							response = response.replaceAll("[0-9]*,","");
-							Log.i(LOG_TAG, "Got response " + response);
-							//response = response.replaceAll("^([0-9]\\.*),.*","$1");
+							StockInfo toUpdate = stock_list.get(ticker);
+
+							// Remove the header stuff now that we've got the
+							// ticker out
+							response = response.replaceAll(
+									"(?s).*volume:[0-9\\,]*", "");
+							// We now have the data on a sequence of lines -
+							// need to dump all but the prices
+							response = response.replaceAll("(?s)\\n[0-9]*,",
+									"\n");
+							response = response.replaceAll(
+									"(?s)\\n([0-9\\.]*),[^\\n]*", "$1\n");
+
+							toUpdate.sc = new StockChart(keepContext);
+							List<String> list = new ArrayList<String>(Arrays
+									.asList(response.split("\n")));
+							Log.i(LOG_TAG, "Got first day value for " + ticker
+									+ ": " + list.get(0));
+
+							for (int i = 0; i < list.size(); i++) {
+								Log.i(LOG_TAG, "Charting day value #" + String.valueOf(i) + " for " + ticker
+										+ ": " + list.get(i));
+								toUpdate.sc.mCurrentSeries.add(i,
+										Double.parseDouble(list.get(i)));
+							}
+							notify_canvas_updates_available(TICKER_DAYCHART_ID,
+									keepContext);
+
 						}
 					});
 

@@ -26,7 +26,7 @@ public class StockChart {
 
 	private XYMultipleSeriesRenderer mRenderer = new XYMultipleSeriesRenderer();
 
-	private XYSeries mCurrentSeries;
+	public XYSeries mCurrentSeries;
 
 	private XYSeriesRenderer mCurrentRenderer;
 
