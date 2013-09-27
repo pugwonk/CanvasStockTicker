@@ -12,6 +12,7 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint.Align;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.View;
@@ -24,7 +25,7 @@ public class StockChart {
 
 	private XYMultipleSeriesDataset mDataset = new XYMultipleSeriesDataset();
 
-	private XYMultipleSeriesRenderer mRenderer = new XYMultipleSeriesRenderer();
+	public XYMultipleSeriesRenderer mRenderer = new XYMultipleSeriesRenderer();
 
 	public XYSeries mCurrentSeries;
 
@@ -35,33 +36,31 @@ public class StockChart {
 		mDataset.addSeries(mCurrentSeries);
 		mCurrentRenderer = new XYSeriesRenderer();
 		mCurrentRenderer.setShowLegendItem(false);
-		mCurrentRenderer.setLineWidth(4f);
+		mCurrentRenderer.setLineWidth(2f);
 		mCurrentRenderer.setColor(Color.WHITE);
 		mRenderer.addSeriesRenderer(mCurrentRenderer);
-		mRenderer.setShowAxes(false);
+		mRenderer.setMargins(new int[] { 0, 35, 0, 0 });
+		mRenderer.setShowAxes(true);
+		mRenderer.setAxesColor(Color.WHITE);
 		mRenderer.setXLabels(0);
-		mRenderer.setYLabels(0);
+		mRenderer.setYLabels(4);
+		mRenderer.setLabelsTextSize(12);
+		mRenderer.setXLabelsPadding(-10);
+		mRenderer.setYLabelsAlign(Align.RIGHT);
+		mRenderer.setYLabelsPadding(5);
 		mRenderer.setApplyBackgroundColor(true);
 		mRenderer.setBackgroundColor(Color.BLACK);
-		//mRenderer.setMarginsColor(Color.BLACK);
-	}
-
-	private void addSampleData() {
-		mCurrentSeries.add(1, 2);
-		mCurrentSeries.add(2, 3);
-		mCurrentSeries.add(3, 2);
-		mCurrentSeries.add(4, 5);
-		mCurrentSeries.add(5, 4);
+		// mRenderer.setMarginsColor(Color.BLACK);
 	}
 
 	public StockChart(Context context) {
 		initChart();
-		//addSampleData();
+		// addSampleData();
 		mChart = ChartFactory.getLineChartView(context, mDataset, mRenderer);
 	}
-	
+
 	public Bitmap getBitmap() {
-		return bitmapFromChartView(mChart, 200, 200);
+		return bitmapFromChartView(mChart, 120, 120);
 	}
 
 	private Bitmap loadBitmapFromView(View v) {

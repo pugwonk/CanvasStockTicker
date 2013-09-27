@@ -29,24 +29,31 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 	// this plugin package
 	public static final int TICKER_DAYCHART_ID = 2;
 
-	private static final String[] MASKS = { "%T", "%S", "%P" };
+	private static final String[] MASKS = { "%T", "%S", "%P", "%C" };
 	private static final int MASK_TIME = 0;
 	private static final int MASK_TICKER = 1;
 	private static final int MASK_PRICE = 2;
+	private static final int MASK_PCTCHANGE = 3;
 
-	private static class StockInfo {
+	private static class TickInfo {
 		String time;
-		// String ticker;
+		String pctchange;
 		double price;
+	}
+
+	private static class ChartInfo {
+		String time;
 		StockChart sc;
-		public StockInfo(Context context) {
+
+		public ChartInfo(Context context) {
 			sc = new StockChart(context);
 		}
 	}
 
 	// private static StockInfo current_state = new StockInfo();
 
-	static Map<String, StockInfo> stock_list = new HashMap<String, StockInfo>();
+	static Map<String, TickInfo> tick_list = new HashMap<String, TickInfo>();
+	static Map<String, ChartInfo> chart_list = new HashMap<String, ChartInfo>();
 
 	// send plugin metadata to Canvas when requested
 	@Override
@@ -69,6 +76,7 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 		examples.add("10:35");
 		examples.add("MSFT");
 		examples.add("30.52");
+		examples.add("+1.53%");
 		tplug.params_description = "Ticker symbol";
 		tplug.format_mask_examples = examples;
 		tplug.format_masks = new ArrayList<String>(Arrays.asList(MASKS));
@@ -90,18 +98,22 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 	protected String get_format_mask_value(int def_id, String format_mask,
 			Context context, String param) {
 
-//		Log.i(LOG_TAG, "get_format_mask_value def_id = " + def_id
-//				+ " format_mask = '" + format_mask + "'");
+		// Log.i(LOG_TAG, "get_format_mask_value def_id = " + def_id
+		// + " format_mask = '" + format_mask + "'");
 
+		param = param.toUpperCase();
 		if (def_id == TICKER_TEXT_ID) {
 			Log.i(LOG_TAG, "Returning ticker for " + param);
 			startService(context);
 
-			if (!stock_list.containsKey(param)) {
-				stock_list.put(param, new StockInfo(context));
+			if (!tick_list.containsKey(param)) {
+				Log.i(LOG_TAG, "Tick data doesn't exist for " + param
+						+ " - creating");
+				tick_list.put(param, new TickInfo());
+				updateTicker(context); // go ahead and retrieve immediately
 				return "...";
 			}
-			StockInfo current_state = stock_list.get(param);
+			TickInfo current_state = tick_list.get(param);
 
 			// which field to return current value for?
 			if (format_mask.equals(MASKS[MASK_TIME])) {
@@ -110,6 +122,8 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 				return param;
 			} else if (format_mask.equals(MASKS[MASK_PRICE])) {
 				return String.valueOf(current_state.price);
+			} else if (format_mask.equals(MASKS[MASK_PCTCHANGE])) {
+				return current_state.pctchange;
 			}
 		}
 		Log.i(LOG_TAG, "no matching mask found");
@@ -126,28 +140,29 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 	// send bitmap value to canvas when requested
 	@Override
 	protected Bitmap get_bitmap_value(int def_id, Context context, String param) {
+		param = param.toUpperCase();
 		if (def_id == TICKER_DAYCHART_ID) {
 			Log.i(LOG_TAG, "Returning day chart for " + param);
 			startService(context);
 			// Data not retrieved for this yet - just return the icon for the
 			// moment
-			if (!stock_list.containsKey(param)) {
-				Log.i(LOG_TAG, "Day chart data doesn't exist for " + param + " - creating");
-				StockInfo makeStock = new StockInfo(context);
-				stock_list.put(param, makeStock);
+			if (!chart_list.containsKey(param)) {
+				Log.i(LOG_TAG, "Day chart data doesn't exist for " + param
+						+ " - creating");
+				ChartInfo makeStock = new ChartInfo(context);
+				chart_list.put(param, makeStock);
+				updateTicker(context); // go ahead and retrieve immediately
 				return BitmapFactory.decodeResource(context.getResources(),
-						R.drawable.canvas_icon);
+						R.drawable.hourglass919);
 			}
-			StockInfo current_state = stock_list.get(param);
+			ChartInfo current_state = chart_list.get(param);
 
 			if (current_state.sc != null) { // we have already drawn chart
 				Bitmap bm = current_state.sc.getBitmap();
 				return bm;
-			}
-			else
-			{
+			} else {
 				return BitmapFactory.decodeResource(context.getResources(),
-						R.drawable.canvas_icon);
+						R.drawable.hourglass919);
 			}
 		}
 		Log.i(LOG_TAG, "no matching image mask found");
@@ -162,30 +177,34 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 
 		keepContext = context;
 
-		for (Entry<String, StockInfo> entry : stock_list.entrySet()) {
+		for (Entry<String, TickInfo> entry : tick_list.entrySet()) {
 			Log.i(LOG_TAG, "Updating ticker for " + entry.getKey());
 			client.get(
 					"http://finance.yahoo.com/d/quotes.csv?s=" + entry.getKey()
-							+ "&f=sbp2m2", new AsyncHttpResponseHandler() {
+							+ "&f=sbp2", new AsyncHttpResponseHandler() {
 						@Override
 						public void onSuccess(String response) {
-							Log.i(LOG_TAG, "Got valid tick response: " + response);
+							Log.i(LOG_TAG, "Got valid tick response: "
+									+ response);
 							List<String> list = new ArrayList<String>(Arrays
 									.asList(response.split(",")));
 
 							String ticker = list.get(0).replace("\"", "");
-							StockInfo toUpdate = stock_list.get(ticker);
+							TickInfo toUpdate = tick_list.get(ticker);
 
 							toUpdate.time = new SimpleDateFormat("H:mm")
 									.format(Calendar.getInstance().getTime());
 
 							toUpdate.price = Double.parseDouble(list.get(1));
-							Log.i(LOG_TAG, "Requesting ticker update");
+							toUpdate.pctchange = list.get(2).replace("\"", "");
+							Log.i(LOG_TAG, "Requesting screen text refresh");
 							notify_canvas_updates_available(TICKER_TEXT_ID,
 									keepContext);
 						}
 					});
+		}
 
+		for (Entry<String, ChartInfo> entry : chart_list.entrySet()) {
 			Log.i(LOG_TAG, "Updating day chart for " + entry.getKey());
 			client.get("http://chartapi.finance.yahoo.com/instrument/1.0/"
 					+ entry.getKey() + "/chartdata;type=quote;range=1d/csv",
@@ -199,7 +218,7 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 							String ticker = response.replaceAll(
 									"(?s).*ticker:(\\w{4}).*", "$1");
 							ticker = ticker.toUpperCase();
-							StockInfo toUpdate = stock_list.get(ticker);
+							ChartInfo toUpdate = chart_list.get(ticker);
 
 							// Remove the header stuff now that we've got the
 							// ticker out
@@ -212,24 +231,26 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 							response = response.replaceAll(
 									"(?s)\\n([0-9\\.]*),[^\\n]*", "$1\n");
 
-							//Log.i(LOG_TAG, "Creating chart");
-							//toUpdate.sc = new StockChart(keepContext);
-							//Log.i(LOG_TAG, "Chart created");
-							Log.i(LOG_TAG, "Populating day chart for " + ticker);
+							// Log.i(LOG_TAG, "Creating chart");
+							// toUpdate.sc = new StockChart(keepContext);
+							// Log.i(LOG_TAG, "Chart created");
 							List<String> list = new ArrayList<String>(Arrays
 									.asList(response.split("\n")));
 							Log.i(LOG_TAG, "Got first day value for " + ticker
 									+ ": " + list.get(0));
 
-							toUpdate.sc.mCurrentSeries.setTitle(ticker); // for debug
+							toUpdate.sc.mCurrentSeries.setTitle(ticker); // for
+																			// debug
+							toUpdate.sc.mRenderer.setXTitle(ticker + " over day");
 							for (int i = 0; i < list.size(); i++) {
-//								Log.i(LOG_TAG, "Charting day value #" + String.valueOf(i) + " for " + ticker
-//										+ ": " + list.get(i));
-								Double stockVal = Double.parseDouble(list.get(i));
-								toUpdate.sc.mCurrentSeries.add(i,
-										stockVal);
+								// Log.i(LOG_TAG, "Charting day value #" +
+								// String.valueOf(i) + " for " + ticker
+								// + ": " + list.get(i));
+								Double stockVal = Double.parseDouble(list
+										.get(i));
+								toUpdate.sc.mCurrentSeries.add(i, stockVal);
 							}
-							Log.i(LOG_TAG, "Requesting chart update");
+							Log.i(LOG_TAG, "Requesting screen image refresh");
 							notify_canvas_updates_available(TICKER_DAYCHART_ID,
 									keepContext);
 
