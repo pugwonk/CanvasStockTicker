@@ -103,16 +103,19 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 
 		param = param.toUpperCase();
 		if (def_id == TICKER_TEXT_ID) {
-			Log.i(LOG_TAG, "Returning ticker for " + param);
+			Log.i(LOG_TAG, "get_format_mask_value: Ticker request for " + param);
 			startService(context);
 
 			if (!tick_list.containsKey(param)) {
-				Log.i(LOG_TAG, "Tick data doesn't exist for " + param
-						+ " - creating");
+				Log.i(LOG_TAG,
+						"get_format_mask_value: Tick data doesn't exist for "
+								+ param + " - creating");
 				tick_list.put(param, new TickInfo());
-				updateTicker(context); // go ahead and retrieve immediately
+				updateSingleTicker(context, param, true); // go ahead and retrieve immediately
 				return "...";
 			}
+			Log.i(LOG_TAG, "get_format_mask_value: Have ticker already for "
+					+ param + " so returning it");
 			TickInfo current_state = tick_list.get(param);
 
 			// which field to return current value for?
@@ -126,7 +129,7 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 				return current_state.pctchange;
 			}
 		}
-		Log.i(LOG_TAG, "no matching mask found");
+		Log.i(LOG_TAG, "get_format_mask_value: no matching mask found");
 		return null;
 	}
 
@@ -142,123 +145,146 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 	protected Bitmap get_bitmap_value(int def_id, Context context, String param) {
 		param = param.toUpperCase();
 		if (def_id == TICKER_DAYCHART_ID) {
-			Log.i(LOG_TAG, "Returning day chart for " + param);
+			Log.i(LOG_TAG, "get_bitmap_value: Day chart request for " + param);
 			startService(context);
 			// Data not retrieved for this yet - just return the icon for the
 			// moment
 			if (!chart_list.containsKey(param)) {
-				Log.i(LOG_TAG, "Day chart data doesn't exist for " + param
-						+ " - creating");
+				Log.i(LOG_TAG,
+						"get_bitmap_value: Day chart data doesn't exist for "
+								+ param + " - creating and requesting");
 				ChartInfo makeStock = new ChartInfo(context);
 				chart_list.put(param, makeStock);
-				updateTicker(context); // go ahead and retrieve immediately
+				updateSingleChart(context, param, true); // go ahead and retrieve immediately
 				return BitmapFactory.decodeResource(context.getResources(),
 						R.drawable.hourglass919);
 			}
 			ChartInfo current_state = chart_list.get(param);
 
 			if (current_state.sc != null) { // we have already drawn chart
+				Log.i(LOG_TAG, "get_bitmap_value: Have chart for " + param
+						+ " already so returning it");
 				Bitmap bm = current_state.sc.getBitmap();
 				return bm;
 			} else {
+				Log.i(LOG_TAG, "get_bitmap_value: Chart oddly missing for "
+						+ param + " so returning hourglass");
 				return BitmapFactory.decodeResource(context.getResources(),
 						R.drawable.hourglass919);
 			}
 		}
-		Log.i(LOG_TAG, "no matching image mask found");
+		Log.i(LOG_TAG, "get_bitmap_value: no matching image mask found");
 		return BitmapFactory.decodeResource(context.getResources(),
 				R.drawable.canvas_icon);
 	}
 
-	static Context keepContext;
-
-	public static void updateTicker(Context context) {
+	private static void updateSingleTicker(final Context context,
+			String ticker, final Boolean sendScreenUpdate) {
 		AsyncHttpClient client = new AsyncHttpClient();
 
-		keepContext = context;
+		client.get("http://finance.yahoo.com/d/quotes.csv?s=" + ticker
+				+ "&f=sbp2", new AsyncHttpResponseHandler() {
+			@Override
+			public void onSuccess(String response) {
+				Log.i(LOG_TAG, "updateSingleTicker: Got valid tick response: "
+						+ response);
+				List<String> list = new ArrayList<String>(Arrays
+						.asList(response.split(",")));
 
-		for (Entry<String, TickInfo> entry : tick_list.entrySet()) {
-			Log.i(LOG_TAG, "Updating ticker for " + entry.getKey());
-			client.get(
-					"http://finance.yahoo.com/d/quotes.csv?s=" + entry.getKey()
-							+ "&f=sbp2", new AsyncHttpResponseHandler() {
-						@Override
-						public void onSuccess(String response) {
-							Log.i(LOG_TAG, "Got valid tick response: "
-									+ response);
-							List<String> list = new ArrayList<String>(Arrays
-									.asList(response.split(",")));
+				String ticker = list.get(0).replace("\"", "");
+				TickInfo toUpdate = tick_list.get(ticker);
 
-							String ticker = list.get(0).replace("\"", "");
-							TickInfo toUpdate = tick_list.get(ticker);
+				toUpdate.time = new SimpleDateFormat("H:mm").format(Calendar
+						.getInstance().getTime());
 
-							toUpdate.time = new SimpleDateFormat("H:mm")
-									.format(Calendar.getInstance().getTime());
-
-							toUpdate.price = Double.parseDouble(list.get(1));
-							toUpdate.pctchange = list.get(2).replace("\"", "");
-							Log.i(LOG_TAG, "Requesting screen text refresh");
-							notify_canvas_updates_available(TICKER_TEXT_ID,
-									keepContext);
-						}
-					});
-		}
-
-		for (Entry<String, ChartInfo> entry : chart_list.entrySet()) {
-			Log.i(LOG_TAG, "Updating day chart for " + entry.getKey());
-			client.get("http://chartapi.finance.yahoo.com/instrument/1.0/"
-					+ entry.getKey() + "/chartdata;type=quote;range=1d/csv",
-					new AsyncHttpResponseHandler() {
-						@Override
-						public void onSuccess(String response) {
-							Log.i(LOG_TAG, "Got valid day chart response");
-							// Strip out all the data at the top, leaving just
-							// the tick data. The ?s thing
-							// does it multi-line
-							String ticker = response.replaceAll(
-									"(?s).*ticker:(\\w{4}).*", "$1");
-							ticker = ticker.toUpperCase();
-							ChartInfo toUpdate = chart_list.get(ticker);
-
-							// Remove the header stuff now that we've got the
-							// ticker out
-							response = response.replaceAll(
-									"(?s).*volume:[0-9\\,]*", "");
-							// We now have the data on a sequence of lines -
-							// need to dump all but the prices
-							response = response.replaceAll("(?s)\\n[0-9]*,",
-									"\n");
-							response = response.replaceAll(
-									"(?s)\\n([0-9\\.]*),[^\\n]*", "$1\n");
-
-							// Log.i(LOG_TAG, "Creating chart");
-							// toUpdate.sc = new StockChart(keepContext);
-							// Log.i(LOG_TAG, "Chart created");
-							List<String> list = new ArrayList<String>(Arrays
-									.asList(response.split("\n")));
-							Log.i(LOG_TAG, "Got first day value for " + ticker
-									+ ": " + list.get(0));
-
-							toUpdate.sc.mCurrentSeries.setTitle(ticker); // for
-																			// debug
-							toUpdate.sc.mRenderer.setXTitle(ticker + " over day");
-							for (int i = 0; i < list.size(); i++) {
-								// Log.i(LOG_TAG, "Charting day value #" +
-								// String.valueOf(i) + " for " + ticker
-								// + ": " + list.get(i));
-								Double stockVal = Double.parseDouble(list
-										.get(i));
-								toUpdate.sc.mCurrentSeries.add(i, stockVal);
-							}
-							Log.i(LOG_TAG, "Requesting screen image refresh");
-							notify_canvas_updates_available(TICKER_DAYCHART_ID,
-									keepContext);
-
-						}
-					});
-
-		}
-
+				toUpdate.price = Double.parseDouble(list.get(1));
+				toUpdate.pctchange = list.get(2).replace("\"", "")
+						.replace("\n", "");
+				if (sendScreenUpdate) {
+					Log.i(LOG_TAG,
+							"updateSingleTicker: Requesting screen text refresh");
+					notify_canvas_updates_available(TICKER_TEXT_ID, context);
+				}
+			}
+		});
 	}
 
+	private static void updateSingleChart(final Context context, String ticker,
+			final Boolean sendScreenUpdate) {
+		AsyncHttpClient client = new AsyncHttpClient();
+		
+		client.get("http://chartapi.finance.yahoo.com/instrument/1.0/" + ticker
+				+ "/chartdata;type=quote;range=1d/csv",
+				new AsyncHttpResponseHandler() {
+					@Override
+					public void onSuccess(String response) {
+						Log.i(LOG_TAG,
+								"updateSingleChart: Got valid day chart response");
+						// Strip out all the data at the top, leaving just
+						// the tick data. The ?s thing
+						// does it multi-line
+						String ticker = response.replaceAll(
+								"(?s).*ticker:(\\w{4}).*", "$1");
+						ticker = ticker.toUpperCase();
+						ChartInfo toUpdate = chart_list.get(ticker);
+
+						// Remove the header stuff now that we've got the
+						// ticker out
+						response = response.replaceAll(
+								"(?s).*volume:[0-9\\,]*", "");
+						// We now have the data on a sequence of lines -
+						// need to dump all but the prices
+						response = response.replaceAll("(?s)\\n[0-9]*,", "\n");
+						response = response.replaceAll(
+								"(?s)\\n([0-9\\.]*),[^\\n]*", "$1\n");
+
+						// Log.i(LOG_TAG, "Creating chart");
+						// toUpdate.sc = new StockChart(keepContext);
+						// Log.i(LOG_TAG, "Chart created");
+						List<String> list = new ArrayList<String>(Arrays
+								.asList(response.split("\n")));
+						Log.i(LOG_TAG,
+								"updateSingleChart: Got first day value for "
+										+ ticker + ": " + list.get(0));
+
+						toUpdate.sc.mCurrentSeries.setTitle(ticker); // for
+																		// debug
+						toUpdate.sc.mRenderer.setXTitle(ticker + " over day");
+						for (int i = 0; i < list.size(); i++) {
+							// Log.i(LOG_TAG, "Charting day value #" +
+							// String.valueOf(i) + " for " + ticker
+							// + ": " + list.get(i));
+							Double stockVal = Double.parseDouble(list.get(i));
+							toUpdate.sc.mCurrentSeries.add(i, stockVal);
+						}
+						if (sendScreenUpdate) {
+							Log.i(LOG_TAG,
+									"updateSingleChart: Requesting screen chart refresh");
+							notify_canvas_updates_available(TICKER_DAYCHART_ID,
+									context);
+						}
+					}
+				});
+	}
+
+	public static void updateTicker(Context context) {
+
+		for (Entry<String, TickInfo> entry : tick_list.entrySet()) {
+			Log.i(LOG_TAG,
+					"updateTicker: Updating ticker for " + entry.getKey());
+			updateSingleTicker(context, entry.getKey(), false);
+		}
+		Log.i(LOG_TAG, "updateTicker: Requesting screen text refresh");
+		notify_canvas_updates_available(TICKER_TEXT_ID, context);
+
+		for (Entry<String, ChartInfo> entry : chart_list.entrySet()) {
+			Log.i(LOG_TAG,
+					"updateTicker: Updating day chart for " + entry.getKey());
+			updateSingleChart(context, entry.getKey(), false);
+		}
+		Log.i(LOG_TAG,
+				"updateTicker: Requesting screen chart refresh");
+		notify_canvas_updates_available(TICKER_DAYCHART_ID,
+				context);
+	}
 }
