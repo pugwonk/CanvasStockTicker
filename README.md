@@ -5,6 +5,3 @@ A simple stock price ticker in a [Canvas for Pebble](http://pebblecanvas.blogspo
 Things to do:
 
 * Stop the thing from retrieving data for charts you're not displaying
-* Return something other than the program icon when stock chart data hasn't been retrieved yet
-* Make it update stocks earlier than the ticker time when you add a new one or change a symbol (charts go blank because of this if you change their ticker)
-* Horrible performance stripping out the RegEx stuff. Should do it with normal search/replace functions

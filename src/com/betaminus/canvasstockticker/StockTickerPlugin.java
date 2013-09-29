@@ -86,7 +86,7 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 		// chart
 		ImagePluginDefinition iplug = new ImagePluginDefinition();
 		iplug.id = TICKER_DAYCHART_ID;
-		iplug.name = context.getString(R.string.plugin_name);
+		iplug.name = context.getString(R.string.plugin_name) + " 120x120";
 		iplug.params_description = "Ticker symbol";
 		plugins.add(iplug);
 
@@ -111,7 +111,9 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 						"get_format_mask_value: Tick data doesn't exist for "
 								+ param + " - creating");
 				tick_list.put(param, new TickInfo());
-				updateSingleTicker(context, param, true); // go ahead and retrieve immediately
+				updateSingleTicker(context, param, true); // go ahead and
+															// retrieve
+															// immediately
 				return "...";
 			}
 			Log.i(LOG_TAG, "get_format_mask_value: Have ticker already for "
@@ -155,7 +157,9 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 								+ param + " - creating and requesting");
 				ChartInfo makeStock = new ChartInfo(context);
 				chart_list.put(param, makeStock);
-				updateSingleChart(context, param, true); // go ahead and retrieve immediately
+				updateSingleChart(context, param, true); // go ahead and
+															// retrieve
+															// immediately
 				return BitmapFactory.decodeResource(context.getResources(),
 						R.drawable.hourglass919);
 			}
@@ -209,54 +213,53 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 		});
 	}
 
-	private static void updateSingleChart(final Context context, String ticker,
-			final Boolean sendScreenUpdate) {
+	private static void updateSingleChart(final Context context,
+			final String ticker, final Boolean sendScreenUpdate) {
 		AsyncHttpClient client = new AsyncHttpClient();
-		
+
 		client.get("http://chartapi.finance.yahoo.com/instrument/1.0/" + ticker
 				+ "/chartdata;type=quote;range=1d/csv",
 				new AsyncHttpResponseHandler() {
 					@Override
 					public void onSuccess(String response) {
 						Log.i(LOG_TAG,
-								"updateSingleChart: Got valid day chart response");
+								"updateSingleChart: Got valid day chart response for ticker "
+										+ ticker);
 						// Strip out all the data at the top, leaving just
 						// the tick data. The ?s thing
 						// does it multi-line
-						String ticker = response.replaceAll(
-								"(?s).*ticker:(\\w{4}).*", "$1");
-						ticker = ticker.toUpperCase();
+						// String ticker = response.replaceAll(
+						// "(?s).*ticker:(\\w{4}).*", "$1");
+						// ticker = ticker.toUpperCase();
 						ChartInfo toUpdate = chart_list.get(ticker);
 
 						// Remove the header stuff now that we've got the
 						// ticker out
-						response = response.replaceAll(
+						response = response.replaceFirst(
 								"(?s).*volume:[0-9\\,]*", "");
 						// We now have the data on a sequence of lines -
 						// need to dump all but the prices
-						response = response.replaceAll("(?s)\\n[0-9]*,", "\n");
-						response = response.replaceAll(
-								"(?s)\\n([0-9\\.]*),[^\\n]*", "$1\n");
-
-						// Log.i(LOG_TAG, "Creating chart");
-						// toUpdate.sc = new StockChart(keepContext);
-						// Log.i(LOG_TAG, "Chart created");
-						List<String> list = new ArrayList<String>(Arrays
+						List<String> eachline = new ArrayList<String>(Arrays
 								.asList(response.split("\n")));
 						Log.i(LOG_TAG,
-								"updateSingleChart: Got first day value for "
-										+ ticker + ": " + list.get(0));
-
-						toUpdate.sc.mCurrentSeries.setTitle(ticker); // for
-																		// debug
-						toUpdate.sc.mRenderer.setXTitle(ticker + " over day");
-						for (int i = 0; i < list.size(); i++) {
-							// Log.i(LOG_TAG, "Charting day value #" +
-							// String.valueOf(i) + " for " + ticker
-							// + ": " + list.get(i));
-							Double stockVal = Double.parseDouble(list.get(i));
-							toUpdate.sc.mCurrentSeries.add(i, stockVal);
+								"updateSingleChart: Adding "
+										+ String.valueOf(eachline.size())
+										+ " values to chart for " + ticker);
+						for (int i = 0; i < eachline.size(); i++) {
+							List<String> eachvar = new ArrayList<String>(Arrays
+									.asList(eachline.get(i).split(",")));
+							if (eachvar.size() > 1) { // there are some null
+														// strings kicking
+														// around
+								Double stockVal = Double.parseDouble(eachvar
+										.get(1));
+								toUpdate.sc.mCurrentSeries.add(i, stockVal);
+								// Log.i(LOG_TAG, eachvar.get(1));
+							}
 						}
+						toUpdate.sc.mCurrentSeries.setTitle(ticker); // for
+						toUpdate.sc.mRenderer.setXTitle(ticker + " over day");
+
 						if (sendScreenUpdate) {
 							Log.i(LOG_TAG,
 									"updateSingleChart: Requesting screen chart refresh");
@@ -282,9 +285,7 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 					"updateTicker: Updating day chart for " + entry.getKey());
 			updateSingleChart(context, entry.getKey(), false);
 		}
-		Log.i(LOG_TAG,
-				"updateTicker: Requesting screen chart refresh");
-		notify_canvas_updates_available(TICKER_DAYCHART_ID,
-				context);
+		Log.i(LOG_TAG, "updateTicker: Requesting screen chart refresh");
+		notify_canvas_updates_available(TICKER_DAYCHART_ID, context);
 	}
 }
