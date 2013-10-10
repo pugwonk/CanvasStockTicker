@@ -187,7 +187,7 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 		AsyncHttpClient client = new AsyncHttpClient();
 
 		client.get("http://finance.yahoo.com/d/quotes.csv?s=" + ticker
-				+ "&f=sbp2", new AsyncHttpResponseHandler() {
+				+ "&f=sl1p2", new AsyncHttpResponseHandler() {
 			@Override
 			public void onSuccess(String response) {
 				Log.i(LOG_TAG, "updateSingleTicker: Got valid tick response: "
@@ -201,7 +201,12 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 				toUpdate.time = new SimpleDateFormat("H:mm").format(Calendar
 						.getInstance().getTime());
 
-				toUpdate.price = Double.parseDouble(list.get(1));
+				try {
+					toUpdate.price = Double.parseDouble(list.get(1));
+				} catch (NumberFormatException e) {
+					// Sometimes this returns N/A. Just don't do the update
+					return;
+				}
 				toUpdate.pctchange = list.get(2).replace("\"", "")
 						.replace("\n", "");
 				if (sendScreenUpdate) {
