@@ -1,5 +1,7 @@
 package com.betaminus.canvasstockticker;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -101,6 +103,7 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 		// Log.i(LOG_TAG, "get_format_mask_value def_id = " + def_id
 		// + " format_mask = '" + format_mask + "'");
 
+		if (param == null) return null; // format mask appears sometimes to be null?
 		param = param.toUpperCase();
 		if (def_id == TICKER_TEXT_ID) {
 			Log.i(LOG_TAG, "get_format_mask_value: Ticker request for " + param);
@@ -186,8 +189,18 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 			String ticker, final Boolean sendScreenUpdate) {
 		AsyncHttpClient client = new AsyncHttpClient();
 
-		client.get("http://finance.yahoo.com/d/quotes.csv?s=" + ticker
-				+ "&f=sl1p2", new AsyncHttpResponseHandler() {
+		String url, encurl;
+		url = "http://finance.yahoo.com/d/quotes.csv?s=" + ticker
+				+ "&f=sl1p2";
+		Log.i(LOG_TAG, "updateSingleTicker: URL will be: " + url);
+		try {
+			encurl = URLEncoder.encode(url, "UTF-8");
+		} catch (UnsupportedEncodingException e1) {
+			// TODO Auto-generated catch block
+			Log.i(LOG_TAG, "updateSingleTicker: failed to parse URL: " + url);
+			return;
+		}
+		client.get(encurl, new AsyncHttpResponseHandler() {
 			@Override
 			public void onSuccess(String response) {
 				Log.i(LOG_TAG, "updateSingleTicker: Got valid tick response: "
@@ -205,6 +218,7 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 					toUpdate.price = Double.parseDouble(list.get(1));
 				} catch (NumberFormatException e) {
 					// Sometimes this returns N/A. Just don't do the update
+					Log.i(LOG_TAG, "updateSingleTicker: number format exception");
 					return;
 				}
 				toUpdate.pctchange = list.get(2).replace("\"", "")

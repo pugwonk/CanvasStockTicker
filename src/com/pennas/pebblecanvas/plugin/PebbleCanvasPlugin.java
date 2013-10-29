@@ -20,7 +20,7 @@ import android.util.Log;
 public abstract class PebbleCanvasPlugin extends BroadcastReceiver {
 	private static final int INTERFACE_VERSION = 2;
 	
-	private static final String ABS_LOG_TAG = "CANV_PLUG";
+	private static final String ABS_LOG_TAG = "CANV_PLUGST";
 	// canvas -> plugins
 	public static final String CANVAS_ACTION_REQUEST_DEFINITIONS = "com.pennas.pebblecanvas.plugin.REQUEST_DEFINITIONS";
 	public static final String CANVAS_ACTION_REQUEST_UPDATE = "com.pennas.pebblecanvas.plugin.REQUEST_UPDATE";
@@ -65,7 +65,7 @@ public abstract class PebbleCanvasPlugin extends BroadcastReceiver {
 	 * BroadcastReceiver which will receive messages from Canvas, and process them before calling the plugin callback methods as required
 	 */
 	public final void onReceive(Context context, Intent intent) {
-		//Log.i(ABS_LOG_TAG, "onReceive: " + intent.getAction());
+		Log.i(ABS_LOG_TAG, "onReceive: " + intent.getAction());
 		// Canvas requested definitions - send them
 		if (intent.getAction().equals(CANVAS_ACTION_REQUEST_DEFINITIONS)) {
 			Log.i(ABS_LOG_TAG, "defs");
