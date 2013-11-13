@@ -103,13 +103,14 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 		// Log.i(LOG_TAG, "get_format_mask_value def_id = " + def_id
 		// + " format_mask = '" + format_mask + "'");
 
-		if (param == null) return null; // format mask appears sometimes to be null?
+		if (param == null)
+			return null; // format mask appears sometimes to be null?
 		param = param.toUpperCase();
 		if (def_id == TICKER_TEXT_ID) {
 			Log.i(LOG_TAG, "get_format_mask_value: Ticker request for " + param);
 			startService(context);
 
-			//tick_list.remove(param);
+			// tick_list.remove(param);
 			if (!tick_list.containsKey(param)) {
 				Log.i(LOG_TAG,
 						"get_format_mask_value: Tick data doesn't exist for "
@@ -168,7 +169,7 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 						R.drawable.hourglass919);
 			}
 			ChartInfo current_state = chart_list.get(param);
-			
+
 			if (current_state.sc != null) { // we have already drawn chart
 				Log.i(LOG_TAG, "get_bitmap_value: Have chart for " + param
 						+ " already so returning it");
@@ -191,27 +192,29 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 		AsyncHttpClient client = new AsyncHttpClient();
 
 		String url, encurl;
-		url = "http://finance.yahoo.com/d/quotes.csv?s=" + ticker
-				+ "&f=sl1p2";
-		// This looks a bit weird... but basically if we can't encode the URL then let's not
-		// call it. But we call using the original URL, not the encoded one. :)
 		try {
-			encurl = URLEncoder.encode(url, "UTF-8");
+			encurl = URLEncoder.encode(ticker, "UTF-8");
 		} catch (UnsupportedEncodingException e1) {
 			// TODO Auto-generated catch block
-			Log.i(LOG_TAG, "updateSingleTicker: failed to parse URL: " + url);
+			Log.i(LOG_TAG, "updateSingleTicker: failed to parse ticker for URL: " + ticker);
 			return;
 		}
+		url = "http://finance.yahoo.com/d/quotes.csv?s=" + encurl  + "&f=sl1p2";
 		Log.i(LOG_TAG, "updateSingleTicker: URL will be: " + url);
 		client.get(url, new AsyncHttpResponseHandler() {
 			@Override
 			public void onFailure(Throwable e, String response) {
-				Log.i(LOG_TAG, "updateSingleTicker: HTTP call failed: " + response);
+				Log.i(LOG_TAG, "updateSingleTicker: HTTP call failed: "
+						+ response);
 			}
+
 			@Override
 			public void onFailure(Throwable e) {
-				Log.i(LOG_TAG, "updateSingleTicker: HTTP call failed: " + e.getMessage());
+				Log.i(LOG_TAG,
+						"updateSingleTicker: HTTP call failed: "
+								+ e.getMessage());
 			}
+
 			@Override
 			public void onSuccess(String response) {
 				Log.i(LOG_TAG, "updateSingleTicker: Got valid tick response: "
@@ -229,7 +232,8 @@ public class StockTickerPlugin extends PebbleCanvasPlugin {
 					toUpdate.price = Double.parseDouble(list.get(1));
 				} catch (NumberFormatException e) {
 					// Sometimes this returns N/A. Just don't do the update
-					Log.i(LOG_TAG, "updateSingleTicker: number format exception");
+					Log.i(LOG_TAG,
+							"updateSingleTicker: number format exception");
 					return;
 				}
 				toUpdate.pctchange = list.get(2).replace("\"", "")
